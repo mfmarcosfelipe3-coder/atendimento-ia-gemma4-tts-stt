@@ -1,0 +1,25 @@
+node_modules/
+.env
+.env.production
+.DS_Store
+logs/
+temp/
+coverage/
+dist/
+mimo.exe
+
+# Segundo Cérebro (Ignorar apenas backups e arquivos temporários do Obsidian se necessário)
+segundo-cerebro/.obsidian/workspace
+segundo-cerebro/.obsidian/workspace.json
+
+# Modelos locais e arquivos grandes
+models/**/*.onnx
+models/**/*.json
+*.wav
+*.mp3
+*.ogg
+*.opus
+
+# Backups
+backups/
+*.tar.gz

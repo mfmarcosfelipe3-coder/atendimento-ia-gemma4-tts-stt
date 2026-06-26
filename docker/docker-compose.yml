@@ -1,0 +1,116 @@
+version: '3.8'
+
+services:
+  # === APLICAÇÃO PRINCIPAL ===
+  app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: secretaria-app
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://secretaria:secretaria123@postgres:5432/secretaria_db
+      - REDIS_URL=redis://redis:6379
+      # OLLAMA roda na máquina host, acessar via host.docker.internal ou IP da rede docker
+      - OLLAMA_URL=http://host.docker.internal:11434
+      - PIPER_HTTP_URL=http://piper-http:5500
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - EVOLUTION_API_URL=http://evolution-api:8080
+      - EVOLUTION_API_KEY=${EVOLUTION_API_KEY}
+      - OBSIDIAN_VAULT_PATH=/app/segundo-cerebro
+    volumes:
+      - ../segundo-cerebro:/app/segundo-cerebro
+      - ../temp:/app/temp
+      - ../logs:/app/logs
+      - ../prompts:/app/prompts
+    depends_on:
+      - postgres
+      - redis
+      - evolution-api
+      - piper-http
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # === EVOLUTION API (WhatsApp) ===
+  evolution-api:
+    image: atendai/evolution-api:latest
+    container_name: evolution-api
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      - AUTHENTICATION_API_KEY=${EVOLUTION_API_KEY}
+      - DATABASE_PROVIDER=postgresql
+      - DATABASE_CONNECTION_URI=postgresql://secretaria:secretaria123@postgres:5432/evolution_db
+      - CACHE_REDIS_URI=redis://redis:6379
+      - WEBHOOK_GLOBAL_URL=http://app:3000/api/webhook/evolution
+      - WEBHOOK_GLOBAL_ENABLED=true
+      - WEBHOOK_EVENTS_MESSAGES_UPSERT=true
+      - WEBHOOK_EVENTS_MESSAGES_UPDATE=true
+      - WEBHOOK_EVENTS_CONNECTION_UPDATE=true
+    depends_on:
+      - postgres
+      - redis
+
+  # === PIPER TTS (Wyoming Protocol) ===
+  piper-tts:
+    image: rhasspy/wyoming-piper:latest
+    container_name: piper-tts
+    restart: always
+    ports:
+      - "10200:10200"
+    volumes:
+      - ../models/piper:/data
+    command: >
+      --voice pt_BR-faber-medium
+      --max-piper-procs 2
+      --length-scale 1.0
+      --noise-scale 0.667
+      --noise-w 0.8
+
+  # === PIPER HTTP WRAPPER ===
+  piper-http:
+    build:
+      context: ./piper-http-wrapper
+      dockerfile: Dockerfile
+    container_name: piper-http
+    restart: always
+    ports:
+      - "5500:5500"
+    volumes:
+      - ../models/piper:/models
+    depends_on:
+      - piper-tts
+
+  # === POSTGRESQL ===
+  postgres:
+    image: postgres:16-alpine
+    container_name: secretaria-postgres
+    restart: always
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=secretaria
+      - POSTGRES_PASSWORD=secretaria123
+      # DB default
+      - POSTGRES_DB=secretaria_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init.sql
+
+  # === REDIS ===
+  redis:
+    image: redis:7-alpine
+    container_name: secretaria-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+volumes:
+  postgres_data:
+  redis_data:
